@@ -27,6 +27,7 @@
     "client.RenderTargetMixin",
     "client.TextureAtlasAccessor",
     "client.compat.iris.ExtendedShaderMixin",
+    "client.compat.iris.FallbackShaderMixin",
     "client.compat.iris.IrisRenderingPipelineAccessor",
     "client.compat.iris.IrisRenderingPipelineMixin",
     "client.compat.iris.SodiumProgramsMixin",

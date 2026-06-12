@@ -8,10 +8,31 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
+import net.irisshaders.iris.pipeline.WorldRenderingPhase;
 import net.irisshaders.iris.targets.RenderTargets;
+import net.irisshaders.iris.vertices.ImmediateState;
 
 @Environment(EnvType.CLIENT)
 public class IrisHelpers {
+	public static boolean isShaderpackPipelineActive() {
+		return Iris.getPipelineManager().getPipelineNullable() instanceof IrisRenderingPipeline;
+	}
+
+	public static void pushVanillaShaders() {
+		ImmediateState.bypass = true;
+	}
+
+	public static void popVanillaShaders() {
+		ImmediateState.bypass = false;
+	}
+
+	public static void resetRenderingPhase() {
+		var pipeline = Iris.getPipelineManager().getPipelineNullable();
+		if (pipeline instanceof IrisRenderingPipeline irisPipeline) {
+			irisPipeline.setPhase(WorldRenderingPhase.NONE);
+		}
+	}
+
 	public static boolean copySkyToBuffer(RenderTarget skyBuffer) {
 		var pipeline = Iris.getPipelineManager().getPipelineNullable();
 		if (!(pipeline instanceof IrisRenderingPipeline irisPipeline)) return false;

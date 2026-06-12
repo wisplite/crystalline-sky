@@ -9,6 +9,19 @@ public class SharedRenderVariables {
 	public static final ThreadLocal<MutableInt> shadeFullBright = ThreadLocal.withInitial(() -> new MutableInt(0));
 	private static int blockIrisShaderFramebufferBind = 0;
 	private static int skipVoidSky = 0;
+	private static int capturingSkyBuffer = 0;
+
+	public static boolean isCapturingSkyBuffer() {
+		return capturingSkyBuffer > 0;
+	}
+
+	public static void pushCapturingSkyBuffer() {
+		capturingSkyBuffer++;
+	}
+
+	public static void popCapturingSkyBuffer() {
+		capturingSkyBuffer--;
+	}
 
 	public static boolean shouldShadeFullBright() {
 		return shadeFullBright.get().intValue() > 0;

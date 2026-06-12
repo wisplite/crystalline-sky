@@ -34,4 +34,9 @@ public class SkyboxShaderInterface extends SkyShaderInterface {
 			);
 		}
 	}
+
+	@Override
+	protected int getBoundTextureId() {
+		return Minecraft.getInstance().getTextureManager().getTexture(CrystallineAtlases.SKYBOXES.texture).getId();
+	}
 }

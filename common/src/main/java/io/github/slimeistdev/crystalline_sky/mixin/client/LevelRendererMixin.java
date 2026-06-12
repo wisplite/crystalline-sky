@@ -2,6 +2,8 @@ package io.github.slimeistdev.crystalline_sky.mixin.client;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.platform.GlConst;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -63,6 +65,7 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 		if (crystalline_sky$skyBuffer == null) {
 			var fb = minecraft.getMainRenderTarget();
 			crystalline_sky$skyBuffer = new TextureTarget(fb.width, fb.height, true, Minecraft.ON_OSX);
+			crystalline_sky$configureSkyBufferTexture();
 		}
 		return crystalline_sky$skyBuffer;
 	}
@@ -86,6 +89,7 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 	private void resizeSkyBuffer(int width, int height, CallbackInfo ci) {
 		if (crystalline_sky$skyBuffer != null) {
 			crystalline_sky$skyBuffer.resize(width, height, Minecraft.ON_OSX);
+			crystalline_sky$configureSkyBufferTexture();
 		}
 	}
 
@@ -108,27 +112,31 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 	private void copyAfterSky(DeltaTracker tickCounter, boolean renderBlockOutline, Camera camera,
 							  GameRenderer gameRenderer, LightTexture lightmapTextureManager,
 							  Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
-		var skyBuffer = crystalline_sky$getSkyFramebuffer();
-		skyBuffer.clear(Minecraft.ON_OSX);
-
 		float partialTick = tickCounter.getGameTimeDeltaPartialTick(false);
-		if (crystalline_sky$isBelowHorizon(partialTick)) {
+		if (crystalline_sky$isBelowHorizon(partialTick)
+			|| Mods.IRIS.runIfInstalled(() -> IrisHelpers::isShaderpackPipelineActive).orElse(false)) {
+			var skyBuffer = crystalline_sky$getSkyFramebuffer();
+			skyBuffer.clear(Minecraft.ON_OSX);
 			crystalline_sky$renderSkyBuffer(skyBuffer, tickCounter, camera, gameRenderer, matrix4f, matrix4f2);
 		} else {
-			var copiedFromIris = Mods.IRIS.runIfInstalled(() -> () -> IrisHelpers.copySkyToBuffer(skyBuffer));
-			if (!copiedFromIris.orElse(false))
-				((RenderTarget_Duck) skyBuffer).crystalline_sky$copyColorFrom(minecraft.getMainRenderTarget());
+			var skyBuffer = crystalline_sky$getSkyFramebuffer();
+			skyBuffer.clear(Minecraft.ON_OSX);
+			((RenderTarget_Duck) skyBuffer).crystalline_sky$copyColorFrom(minecraft.getMainRenderTarget());
 		}
+
+		// Iris shader packs replace cloud rendering; baking them into the sky buffer causes artifacts.
+		boolean irisShaderpackActive = Mods.IRIS.runIfInstalled(() -> IrisHelpers::isShaderpackPipelineActive).orElse(false);
 
 		// render clouds
 		CloudStatus cloudRenderMode = this.minecraft.options.getCloudsType();
-		if (cloudRenderMode != CloudStatus.OFF && !this.doesMobEffectBlockSky(camera)) {
+		if (cloudRenderMode != CloudStatus.OFF && !irisShaderpackActive && !this.doesMobEffectBlockSky(camera)) {
 			float f = tickCounter.getGameTimeDeltaPartialTick(false);
 			Vec3 vec3d = camera.getPosition();
 			double cx = vec3d.x();
 			double cy = vec3d.y();
 			double cz = vec3d.z();
 
+			var skyBuffer = crystalline_sky$getSkyFramebuffer();
 			var cloudsFramebuffer0 = this.cloudsTarget;
 			this.cloudsTarget = skyBuffer;
 			cloudsTarget.bindWrite(false);
@@ -154,6 +162,18 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 		original.call(instance, renderLayer, x, y, z, matrix4f, positionMatrix);
 		renderSectionLayer(CrystallineRenderTypes.SKY, x, y, z, matrix4f, positionMatrix);
 		renderSectionLayer(CrystallineRenderTypes.SKYBOX, x, y, z, matrix4f, positionMatrix);
+	}
+
+	@Unique
+	private void crystalline_sky$configureSkyBufferTexture() {
+		if (crystalline_sky$skyBuffer == null) {
+			return;
+		}
+
+		RenderSystem.assertOnRenderThreadOrInit();
+		GlStateManager._bindTexture(crystalline_sky$skyBuffer.getColorTextureId());
+		GlStateManager._texParameter(GlConst.GL_TEXTURE_2D, GlConst.GL_TEXTURE_WRAP_S, GlConst.GL_CLAMP_TO_EDGE);
+		GlStateManager._texParameter(GlConst.GL_TEXTURE_2D, GlConst.GL_TEXTURE_WRAP_T, GlConst.GL_CLAMP_TO_EDGE);
 	}
 
 	@Unique
@@ -185,7 +205,14 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 			|| minecraft.gui.getBossOverlay().shouldCreateWorldFog();
 
 		skyBuffer.bindWrite(false);
-		SharedRenderVariables.pushSkipVoidSky();
+		RenderSystem.viewport(0, 0, skyBuffer.width, skyBuffer.height);
+		SharedRenderVariables.pushCapturingSkyBuffer();
+		boolean belowHorizon = crystalline_sky$isBelowHorizon(partialTick);
+		if (belowHorizon) {
+			SharedRenderVariables.pushSkipVoidSky();
+		}
+		SharedRenderVariables.pushBlockIrisShaderFramebufferBind();
+		Mods.IRIS.executeIfInstalled(() -> IrisHelpers::pushVanillaShaders);
 		try {
 			FogRenderer.setupColor(
 				camera,
@@ -207,8 +234,16 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 				() -> FogRenderer.setupFog(camera, FogRenderer.FogMode.FOG_SKY, renderDistance, isFoggy, partialTick)
 			);
 		} finally {
-			SharedRenderVariables.popSkipVoidSky();
-			minecraft.getMainRenderTarget().bindWrite(false);
+			Mods.IRIS.executeIfInstalled(() -> IrisHelpers::popVanillaShaders);
+			SharedRenderVariables.popBlockIrisShaderFramebufferBind();
+			if (belowHorizon) {
+				SharedRenderVariables.popSkipVoidSky();
+			}
+			SharedRenderVariables.popCapturingSkyBuffer();
+			Mods.IRIS.executeIfInstalled(() -> IrisHelpers::resetRenderingPhase);
+			var main = minecraft.getMainRenderTarget();
+			main.bindWrite(false);
+			RenderSystem.viewport(0, 0, main.width, main.height);
 		}
 	}
 }

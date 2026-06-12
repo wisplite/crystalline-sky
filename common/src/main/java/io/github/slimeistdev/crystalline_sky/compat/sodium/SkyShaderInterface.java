@@ -1,6 +1,8 @@
 package io.github.slimeistdev.crystalline_sky.compat.sodium;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
+import io.github.slimeistdev.crystalline_sky.mixin_ducks.client.LevelRenderer_Duck;
 import io.github.slimeistdev.crystalline_sky.registry.CrystallineItems;
 import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformFloat3v;
 import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformFloat4v;
@@ -11,7 +13,6 @@ import net.caffeinemc.mods.sodium.client.render.chunk.shader.ChunkShaderInterfac
 import net.caffeinemc.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
 import net.caffeinemc.mods.sodium.client.render.chunk.shader.ChunkShaderTextureSlot;
 import net.caffeinemc.mods.sodium.client.render.chunk.shader.ShaderBindingContext;
-import net.caffeinemc.mods.sodium.client.util.TextureUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import org.joml.Matrix4fc;
@@ -46,9 +47,14 @@ public class SkyShaderInterface implements ChunkShaderInterface {
 		this.fogShader = options.fog().getFactory().apply(context);
 	}
 
+	protected int getBoundTextureId() {
+		var fb = ((LevelRenderer_Duck) Minecraft.getInstance().levelRenderer).crystalline_sky$getSkyFramebuffer();
+		return fb.getColorTextureId();
+	}
+
 	@Override
 	public void setupState() {
-		this.bindTexture(ChunkShaderTextureSlot.BLOCK, TextureUtil.getBlockTextureId());
+		this.bindTexture(ChunkShaderTextureSlot.BLOCK, getBoundTextureId());
 
 		Minecraft client = Minecraft.getInstance();
 		if (client.level != null
@@ -80,6 +86,7 @@ public class SkyShaderInterface implements ChunkShaderInterface {
 		forRemoval = true
 	)
 	private void bindTexture(ChunkShaderTextureSlot slot, int textureId) {
+		RenderSystem.setShaderTexture(slot.ordinal(), textureId);
 		GlStateManager._activeTexture(GL32C.GL_TEXTURE0 + slot.ordinal());
 		GlStateManager._bindTexture(textureId);
 		GlUniformInt uniform = this.uniformTextures.get(slot);

@@ -4,6 +4,7 @@ import io.github.slimeistdev.crystalline_sky.annotation.mixin.ConditionalMixin;
 import io.github.slimeistdev.crystalline_sky.compat.Mods;
 import io.github.slimeistdev.crystalline_sky.mixin.client.compat.sodium.TerrainRenderPassAccessor;
 import io.github.slimeistdev.crystalline_sky.registry.client.CrystallineRenderTypes;
+import net.caffeinemc.mods.sodium.client.gl.shader.GlProgram;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.irisshaders.iris.pipeline.programs.SodiumPrograms;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
@@ -21,6 +22,14 @@ public class SodiumProgramsMixin {
 		RenderType renderType = ((TerrainRenderPassAccessor) pass).crystalline_sky$getRenderLayer();
 		if (renderType == CrystallineRenderTypes.SKY || renderType == CrystallineRenderTypes.SKYBOX) {
 			cir.setReturnValue(ShadowRenderingState.areShadowsCurrentlyBeingRendered() ? SodiumPrograms.Pass.SHADOW : SodiumPrograms.Pass.TERRAIN);
+		}
+	}
+
+	@Inject(method = "getProgram", at = @At("HEAD"), cancellable = true)
+	private void crystalline_sky$useCustomSkyShader(TerrainRenderPass pass, CallbackInfoReturnable<GlProgram<?>> cir) {
+		RenderType renderType = ((TerrainRenderPassAccessor) pass).crystalline_sky$getRenderLayer();
+		if (renderType == CrystallineRenderTypes.SKY || renderType == CrystallineRenderTypes.SKYBOX) {
+			cir.setReturnValue(null);
 		}
 	}
 }

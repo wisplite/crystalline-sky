@@ -2,12 +2,17 @@ package io.github.slimeistdev.crystalline_sky.mixin.client;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.platform.GlConst;
+import com.mojang.blaze3d.systems.RenderSystem;
 import io.github.slimeistdev.crystalline_sky.util.SharedRenderVariables;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.world.level.LevelHeightAccessor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = LevelRenderer.class, remap = false)
 public class LevelRendererRenderSkyMixin {
@@ -28,5 +33,18 @@ public class LevelRendererRenderSkyMixin {
 		}
 
 		return original.call(levelData, level);
+	}
+
+	@Inject(
+		method = "renderSky",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/client/multiplayer/ClientLevel;getStarBrightness(F)F"
+		)
+	)
+	private void crystalline_sky$clearDepthBeforeStars(CallbackInfo ci) {
+		if (SharedRenderVariables.isCapturingSkyBuffer()) {
+			RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+		}
 	}
 }
