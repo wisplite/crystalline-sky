@@ -32,12 +32,12 @@ dependencies {
 
 	modCompileOnly(libs.ffapi.renderer) // only for sodium compat
 	modCompileOnly(libs.sodium.neoforge)
-	if (!inCI && "enable_sodium"().toBoolean()) { // this doesn't work, because of jar-in-jar. Sodium must be placed in the mods folder
+	if (!inCI && "enable_sodium_runtime"().toBoolean()) { // Sodium must be in run/mods for jar-in-jar; modLocalRuntime stalls dev startup
 		modLocalRuntime(libs.sodium.neoforge)
 	}
 
 	modCompileOnly(libs.iris.neoforge)
-	if (!inCI && "enable_iris"().toBoolean()) { // this doesn't work, because of jar-in-jar. Iris must be placed in the mods folder
+	if (!inCI && "enable_iris_runtime"().toBoolean()) { // Iris must be in run/mods for jar-in-jar; modLocalRuntime stalls dev startup
 		modLocalRuntime(libs.iris.neoforge)
 		/*modLocalRuntime("org.antlr:antlr4-runtime:4.13.1")
 		modLocalRuntime("io.github.douira:glsl-transformer:2.0.1")

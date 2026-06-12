@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.slimeistdev.crystalline_sky.compat.Mods;
 import io.github.slimeistdev.crystalline_sky.compat.iris.IrisHelpers;
@@ -15,10 +16,12 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -47,6 +50,9 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 
 	@Shadow
 	public abstract void renderClouds(PoseStack matrices, Matrix4f matrix4f, Matrix4f matrix4f2, float tickDelta, double cameraX, double cameraY, double cameraZ);
+
+	@Shadow
+	public abstract void renderSky(Matrix4f frustumMatrix, Matrix4f projectionMatrix, float partialTick, Camera camera, boolean isFoggy, Runnable skyFogSetup);
 
 	@Unique
 	@Nullable
@@ -104,9 +110,15 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 							  Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
 		var skyBuffer = crystalline_sky$getSkyFramebuffer();
 		skyBuffer.clear(Minecraft.ON_OSX);
-		var copiedFromIris = Mods.IRIS.runIfInstalled(() -> () -> IrisHelpers.copySkyToBuffer(skyBuffer));
-		if (!copiedFromIris.orElse(false))
-			((RenderTarget_Duck) skyBuffer).crystalline_sky$copyColorFrom(minecraft.getMainRenderTarget());
+
+		float partialTick = tickCounter.getGameTimeDeltaPartialTick(false);
+		if (crystalline_sky$isBelowHorizon(partialTick)) {
+			crystalline_sky$renderSkyBuffer(skyBuffer, tickCounter, camera, gameRenderer, matrix4f, matrix4f2);
+		} else {
+			var copiedFromIris = Mods.IRIS.runIfInstalled(() -> () -> IrisHelpers.copySkyToBuffer(skyBuffer));
+			if (!copiedFromIris.orElse(false))
+				((RenderTarget_Duck) skyBuffer).crystalline_sky$copyColorFrom(minecraft.getMainRenderTarget());
+		}
 
 		// render clouds
 		CloudStatus cloudRenderMode = this.minecraft.options.getCloudsType();
@@ -142,5 +154,61 @@ public abstract class LevelRendererMixin implements LevelRenderer_Duck {
 		original.call(instance, renderLayer, x, y, z, matrix4f, positionMatrix);
 		renderSectionLayer(CrystallineRenderTypes.SKY, x, y, z, matrix4f, positionMatrix);
 		renderSectionLayer(CrystallineRenderTypes.SKYBOX, x, y, z, matrix4f, positionMatrix);
+	}
+
+	@Unique
+	private boolean crystalline_sky$isBelowHorizon(float partialTick) {
+		var level = minecraft.level;
+		var player = minecraft.player;
+		if (level == null || player == null) {
+			return false;
+		}
+
+		double eyeY = player.getEyePosition(partialTick).y;
+		double horizon = level.getLevelData().getHorizonHeight(level);
+		return eyeY < horizon;
+	}
+
+	@Unique
+	private void crystalline_sky$renderSkyBuffer(
+		RenderTarget skyBuffer,
+		DeltaTracker tickCounter,
+		Camera camera,
+		GameRenderer gameRenderer,
+		Matrix4f frustumMatrix,
+		Matrix4f projectionMatrix
+	) {
+		float partialTick = tickCounter.getGameTimeDeltaPartialTick(false);
+		Vec3 cameraPos = camera.getPosition();
+		float renderDistance = gameRenderer.getRenderDistance();
+		boolean isFoggy = minecraft.level.effects().isFoggyAt(Mth.floor(cameraPos.x), Mth.floor(cameraPos.y))
+			|| minecraft.gui.getBossOverlay().shouldCreateWorldFog();
+
+		skyBuffer.bindWrite(false);
+		SharedRenderVariables.pushSkipVoidSky();
+		try {
+			FogRenderer.setupColor(
+				camera,
+				partialTick,
+				minecraft.level,
+				minecraft.options.getEffectiveRenderDistance(),
+				gameRenderer.getDarkenWorldAmount(partialTick)
+			);
+			FogRenderer.levelFogColor();
+			RenderSystem.clear(16640, Minecraft.ON_OSX);
+			FogRenderer.setupFog(camera, FogRenderer.FogMode.FOG_SKY, renderDistance, isFoggy, partialTick);
+			RenderSystem.setShader(GameRenderer::getPositionShader);
+			this.renderSky(
+				frustumMatrix,
+				projectionMatrix,
+				partialTick,
+				camera,
+				isFoggy,
+				() -> FogRenderer.setupFog(camera, FogRenderer.FogMode.FOG_SKY, renderDistance, isFoggy, partialTick)
+			);
+		} finally {
+			SharedRenderVariables.popSkipVoidSky();
+			minecraft.getMainRenderTarget().bindWrite(false);
+		}
 	}
 }

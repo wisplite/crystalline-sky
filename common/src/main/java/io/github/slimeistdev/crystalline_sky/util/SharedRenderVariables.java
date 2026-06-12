@@ -8,6 +8,7 @@ public class SharedRenderVariables {
 	// because chunk meshing is multithreaded :(
 	public static final ThreadLocal<MutableInt> shadeFullBright = ThreadLocal.withInitial(() -> new MutableInt(0));
 	private static int blockIrisShaderFramebufferBind = 0;
+	private static int skipVoidSky = 0;
 
 	public static boolean shouldShadeFullBright() {
 		return shadeFullBright.get().intValue() > 0;
@@ -31,5 +32,17 @@ public class SharedRenderVariables {
 
 	public static void popBlockIrisShaderFramebufferBind() {
 		blockIrisShaderFramebufferBind--;
+	}
+
+	public static boolean shouldSkipVoidSky() {
+		return skipVoidSky > 0;
+	}
+
+	public static void pushSkipVoidSky() {
+		skipVoidSky++;
+	}
+
+	public static void popSkipVoidSky() {
+		skipVoidSky--;
 	}
 }

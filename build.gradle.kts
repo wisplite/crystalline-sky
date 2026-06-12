@@ -85,7 +85,8 @@ subprojects {
 		runs.configureEach {
 			vmArg("-XX:+AllowEnhancedClassRedefinition")
 			vmArg("-XX:+IgnoreUnrecognizedVMOptions")
-			vmArg("-Dmixin.debug.export=true")
+			// Disabled by default: exports every mixin target to disk and can make startup hang for minutes.
+			// Enable manually when debugging mixins: -Dmixin.debug.export=true
 			vmArg("-Dmixin.env.remapRefMap=true")
 			vmArg("-Dmixin.env.refMapRemappingFile=${projectDir}/build/createSrgToMcp/output.srg")
 		}

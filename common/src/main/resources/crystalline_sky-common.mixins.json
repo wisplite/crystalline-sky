@@ -22,6 +22,7 @@
     "client.GameRendererMixin",
     "client.LevelRenderer_NoSodium_Mixin",
     "client.LevelRendererMixin",
+    "client.LevelRendererRenderSkyMixin",
     "client.ModelBlockRendererMixin",
     "client.RenderTargetMixin",
     "client.TextureAtlasAccessor",
